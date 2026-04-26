@@ -1,5 +1,5 @@
-import KosmosExplorer from "./kosmos-explorer";
+import KosmosHome from "@/components/kosmos-home";
 
 export default function Home() {
-  return <KosmosExplorer />;
+  return <KosmosHome />;
 }
