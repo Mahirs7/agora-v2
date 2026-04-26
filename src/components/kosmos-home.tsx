@@ -3,6 +3,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Bell,
+  Building2,
   ChevronRight,
   Filter,
   Globe2,
@@ -13,6 +14,7 @@ import {
   Search,
   Settings,
   TrendingUp,
+  Trophy,
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import {
@@ -47,21 +49,38 @@ const MarketDetailDrawer = dynamic(
   () => import("@/components/market-detail-drawer"),
   { ssr: false },
 );
+const SportsView = dynamic(() => import("@/components/sports-view"), {
+  ssr: false,
+});
+const PoliticsView = dynamic(() => import("@/components/politics-view"), {
+  ssr: false,
+});
+const LiveTicker = dynamic(() => import("@/components/live-ticker"), {
+  ssr: false,
+});
+const CountryDetailDrawer = dynamic(
+  () => import("@/components/country-detail-drawer"),
+  { ssr: false },
+);
 
 /* ═════════════════  View routing  ════════════════════════════════════════ */
 
-type ViewKey = "globe" | "markets" | "wire";
+type ViewKey = "globe" | "markets" | "wire" | "sports" | "politics";
 
 const VIEW_LABELS: Record<ViewKey, string> = {
   globe: "Globe",
   markets: "Markets",
   wire: "Wire",
+  sports: "Sports",
+  politics: "Politics",
 };
 
 const NAV_ITEMS: { key: ViewKey; icon: typeof Globe2; shortcut: string }[] = [
   { key: "globe", icon: Globe2, shortcut: "1" },
   { key: "markets", icon: LayoutGrid, shortcut: "2" },
   { key: "wire", icon: Newspaper, shortcut: "3" },
+  { key: "sports", icon: Trophy, shortcut: "4" },
+  { key: "politics", icon: Building2, shortcut: "5" },
 ];
 
 /* ═════════════════  Sidebar  ════════════════════════════════════════════ */
@@ -287,14 +306,68 @@ function StatusBar({ data }: { data: KosmosData }) {
 function GlobeView({
   data,
   onSignalSelect,
+  onCountrySelect,
 }: {
   data: KosmosData;
   onSignalSelect: (id: string) => void;
+  onCountrySelect: (iso2: string) => void;
 }) {
   const topSignals = data.signals.slice(0, 6);
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
+      {/* Live now strip */}
+      {data.liveEvents.length > 0 && (
+        <div className="border-b border-white/[0.05] bg-[#070709]/70 backdrop-blur">
+          <div className="flex items-center justify-between px-5 pt-2.5">
+            <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.22em]">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#F03E17]/70" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[#F03E17]" />
+              </span>
+              <span className="text-[#F03E17]">Live now</span>
+              <span className="text-[#444]">· {data.liveEvents.length}</span>
+            </div>
+          </div>
+          <div className="flex gap-2 overflow-x-auto px-5 pb-2.5 pt-2">
+            {data.liveEvents.slice(0, 12).map((ev) => {
+              const sc = severityColor(ev.severity);
+              const startedAgo = ev.live_start_at
+                ? formatRelativeTime(ev.live_start_at)
+                : "";
+              return (
+                <button
+                  key={ev.id}
+                  type="button"
+                  onClick={() => onSignalSelect(ev.id)}
+                  className="group flex shrink-0 items-center gap-2 rounded-full border border-white/[0.05] bg-white/[0.015] px-3 py-1.5 text-left transition-colors hover:border-white/[0.12] hover:bg-white/[0.04]"
+                  style={{ maxWidth: 360 }}
+                >
+                  <span
+                    className="h-1.5 w-1.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: sc, boxShadow: `0 0 6px ${sc}` }}
+                  />
+                  {ev.event_type && (
+                    <span
+                      className="shrink-0 font-mono text-[8px] uppercase tracking-[0.18em]"
+                      style={{ color: sc }}
+                    >
+                      {ev.event_type.replace(/_/g, " ")}
+                    </span>
+                  )}
+                  <span className="min-w-0 flex-1 truncate text-[12px] text-[#dcdcdc]">
+                    {ev.title}
+                  </span>
+                  <span className="shrink-0 font-mono text-[9px] uppercase tracking-[0.18em] text-[#555]">
+                    {ev.country ?? ""} {startedAgo}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Filter row — info only (counts of real data) */}
       <div className="flex items-center justify-between border-b border-white/[0.05] bg-[#070709]/70 px-5 py-2.5 backdrop-blur">
         <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-[#888]">
@@ -329,6 +402,7 @@ function GlobeView({
             compact
             signals={data.signals}
             onSignalSelect={onSignalSelect}
+            onCountrySelect={onCountrySelect}
           />
         </div>
       </div>
@@ -450,8 +524,75 @@ function MarketsView({
     return list.slice(0, 200);
   }, [data.markets, cat, platform, sort, query]);
 
+  const movers = useMemo(() => {
+    return [...data.markets]
+      .filter((m) => typeof m.movement_1h === "number")
+      .sort(
+        (a, b) =>
+          Math.abs(b.movement_1h ?? 0) - Math.abs(a.movement_1h ?? 0),
+      )
+      .slice(0, 6);
+  }, [data.markets]);
+
   return (
     <div className="flex h-full flex-col overflow-hidden">
+      {/* Movers strip */}
+      {movers.length > 0 && (
+        <div className="border-b border-white/[0.05] bg-[#070709]/70 px-5 py-3 backdrop-blur">
+          <div className="mb-2 flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.22em] text-[#555]">
+            <span>Movers · 1h</span>
+            <span className="text-[#444]">top {movers.length}</span>
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {movers.map((m) => {
+              const up = (m.movement_1h ?? 0) >= 0;
+              const accent = categoryAccent(m.category);
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => onMarketSelect(m.id)}
+                  className="group flex shrink-0 items-center gap-2.5 rounded-lg border border-white/[0.05] bg-white/[0.015] px-3 py-2 text-left transition-colors hover:border-white/[0.12] hover:bg-white/[0.04]"
+                  style={{ width: 280 }}
+                >
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-md border border-white/[0.05] bg-white/[0.04]">
+                    {m.image_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={m.image_url}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <span
+                        className="font-mono text-[10px] uppercase"
+                        style={{ color: accent }}
+                      >
+                        {(m.platform ?? "·").slice(0, 2).toUpperCase()}
+                      </span>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="line-clamp-1 text-[12px] leading-snug text-[#dcdcdc]">
+                      {m.title}
+                    </div>
+                    <div className="mt-0.5 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[#555]">
+                      <span className="text-[#bbb]">
+                        {((m.yes_price ?? 0) * 100).toFixed(0)}%
+                      </span>
+                      <span style={{ color: up ? "#22c55e" : "#F03E17" }}>
+                        {up ? "▲" : "▼"}{" "}
+                        {Math.abs((m.movement_1h ?? 0) * 100).toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Filter row */}
       <div className="flex flex-wrap items-center gap-3 border-b border-white/[0.05] bg-[#070709]/70 px-5 py-3 backdrop-blur">
         <div className="relative">
@@ -1185,6 +1326,7 @@ export default function KosmosHome() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [activeSignalId, setActiveSignalId] = useState<string | null>(null);
   const [activeMarketId, setActiveMarketId] = useState<string | null>(null);
+  const [activeCountry, setActiveCountry] = useState<string | null>(null);
   const data = useKosmosData(45_000);
 
   const activeSignalFallback = useMemo(() => {
@@ -1216,7 +1358,7 @@ export default function KosmosHome() {
       }
       if (
         meta &&
-        ["1", "2", "3"].includes(e.key) &&
+        ["1", "2", "3", "4", "5"].includes(e.key) &&
         !(e.target instanceof HTMLInputElement) &&
         !(e.target instanceof HTMLTextAreaElement)
       ) {
@@ -1231,9 +1373,23 @@ export default function KosmosHome() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-  const showRightRail = view !== "wire";
-  const onSignalSelect = (id: string) => setActiveSignalId(id);
-  const onMarketSelect = (id: string) => setActiveMarketId(id);
+  const showRightRail =
+    view !== "wire" && view !== "sports" && view !== "politics";
+  const onSignalSelect = (id: string) => {
+    setActiveMarketId(null);
+    setActiveCountry(null);
+    setActiveSignalId(id);
+  };
+  const onMarketSelect = (id: string) => {
+    setActiveSignalId(null);
+    setActiveCountry(null);
+    setActiveMarketId(id);
+  };
+  const onCountrySelect = (iso2: string) => {
+    setActiveSignalId(null);
+    setActiveMarketId(null);
+    setActiveCountry(iso2);
+  };
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-[#0a0a0d] text-[#EAE8E3] selection:bg-[#F03E17] selection:text-white">
@@ -1248,13 +1404,23 @@ export default function KosmosHome() {
         <div className="flex min-h-0 flex-1">
           <main className="min-w-0 flex-1 bg-[#0a0a0d]">
             {view === "globe" && (
-              <GlobeView data={data} onSignalSelect={onSignalSelect} />
+              <GlobeView
+                data={data}
+                onSignalSelect={onSignalSelect}
+                onCountrySelect={onCountrySelect}
+              />
             )}
             {view === "markets" && (
               <MarketsView data={data} onMarketSelect={onMarketSelect} />
             )}
             {view === "wire" && (
               <WireView data={data} onSignalSelect={onSignalSelect} />
+            )}
+            {view === "sports" && (
+              <SportsView onMarketSelect={onMarketSelect} />
+            )}
+            {view === "politics" && (
+              <PoliticsView onMarketSelect={onMarketSelect} />
             )}
           </main>
           {showRightRail && (
@@ -1267,6 +1433,10 @@ export default function KosmosHome() {
             />
           )}
         </div>
+        <LiveTicker
+          markets={data.markets}
+          onMarketSelect={onMarketSelect}
+        />
         <StatusBar data={data} />
       </div>
 
@@ -1283,12 +1453,23 @@ export default function KosmosHome() {
         signalId={activeSignalId}
         fallback={activeSignalFallback}
         onClose={() => setActiveSignalId(null)}
+        onMarketSelect={onMarketSelect}
+        feed={data.feed}
       />
 
       <MarketDetailDrawer
         marketId={activeMarketId}
         fallback={activeMarketFallback}
         onClose={() => setActiveMarketId(null)}
+        onSignalSelect={onSignalSelect}
+        signals={data.signals}
+      />
+
+      <CountryDetailDrawer
+        iso2={activeCountry}
+        onClose={() => setActiveCountry(null)}
+        onSignalSelect={onSignalSelect}
+        onMarketSelect={onMarketSelect}
       />
     </div>
   );

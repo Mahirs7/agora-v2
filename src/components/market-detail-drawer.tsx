@@ -1,32 +1,43 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { ExternalLink, X } from "lucide-react";
+import { ExternalLink, MessageCircle, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import {
   categoryAccent,
   fetchMarketDetail,
+  fetchPmComments,
   formatRelativeTime,
   formatVolume,
   type Market,
   type MarketDetail,
   platformLabel,
+  type PmComment,
+  severityColor,
+  severityLabel,
+  type Signal,
+  useMarketLivePrice,
 } from "@/lib/kosmos-data";
 
 export default function MarketDetailDrawer({
   marketId,
   onClose,
   fallback,
+  onSignalSelect,
+  signals = [],
 }: {
   marketId: string | null;
   onClose: () => void;
   fallback?: Market | null;
+  onSignalSelect?: (id: string) => void;
+  signals?: Signal[];
 }) {
   const [detail, setDetail] = useState<MarketDetail | null>(
     fallback ? (fallback as MarketDetail) : null,
   );
   const [loading, setLoading] = useState(false);
+  const [pmComments, setPmComments] = useState<PmComment[]>([]);
 
   useEffect(() => {
     if (!marketId) return;
@@ -48,6 +59,24 @@ export default function MarketDetailDrawer({
     }
   }, [marketId, fallback]);
 
+  /* Fetch Polymarket comments only for polymarket markets */
+  useEffect(() => {
+    if (!marketId) return;
+    const platform = (detail?.platform ?? fallback?.platform ?? "").toLowerCase();
+    if (platform !== "polymarket") {
+      setPmComments([]);
+      return;
+    }
+    let cancelled = false;
+    fetchPmComments(marketId, 20).then((cs) => {
+      if (cancelled) return;
+      setPmComments(cs);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [marketId, detail?.platform, fallback?.platform]);
+
   useEffect(() => {
     if (!marketId) return;
     function onKey(e: KeyboardEvent) {
@@ -60,8 +89,26 @@ export default function MarketDetailDrawer({
   const open = Boolean(marketId);
   const m = detail;
   const accent = m ? categoryAccent(m.category) : "#888";
-  const yesPct = m?.yes_price != null ? Math.round(m.yes_price * 100) : null;
-  const noPct = m?.no_price != null ? Math.round(m.no_price * 100) : null;
+
+  // Live WebSocket price overrides static price when present.
+  const live = useMarketLivePrice(open ? marketId : null);
+  const liveYes = live.price?.yes_price ?? null;
+  const liveNo = live.price?.no_price ?? null;
+  const yesPrice = liveYes ?? m?.yes_price ?? null;
+  const noPrice = liveNo ?? m?.no_price ?? null;
+  const yesPct =
+    yesPrice != null ? Math.round(yesPrice * 100) : null;
+  const noPct = noPrice != null ? Math.round(noPrice * 100) : null;
+
+  // Pulse flag for "just updated" indicator
+  const [pulseOn, setPulseOn] = useState(false);
+  useEffect(() => {
+    if (!live.pulseAt) return;
+    setPulseOn(true);
+    const t = setTimeout(() => setPulseOn(false), 600);
+    return () => clearTimeout(t);
+  }, [live.pulseAt]);
+
   const movement = m?.movement_1h ?? null;
   const movementUp = (movement ?? 0) >= 0;
 
@@ -82,6 +129,16 @@ export default function MarketDetailDrawer({
       done: false,
     };
   }, [m]);
+
+  const relatedSignals = useMemo(() => {
+    if (!marketId) return [];
+    return signals
+      .filter((s) =>
+        (s.markets ?? []).some((sm) => sm.market_id === marketId),
+      )
+      .sort((a, b) => (b.severity ?? 0) - (a.severity ?? 0))
+      .slice(0, 5);
+  }, [marketId, signals]);
 
   const chartPoints = useMemo(() => {
     if (!m?.priceHistory || m.priceHistory.length < 2) return null;
@@ -203,6 +260,32 @@ export default function MarketDetailDrawer({
 
             {m && (
               <div className="space-y-6 p-5">
+                {/* Live status row */}
+                <div className="flex items-center justify-between font-mono text-[9px] uppercase tracking-[0.22em] text-[#555]">
+                  <div className="flex items-center gap-1.5">
+                    <span className="relative flex h-1.5 w-1.5">
+                      {live.connected && (
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#22c55e]/60" />
+                      )}
+                      <span
+                        className={`relative inline-flex h-1.5 w-1.5 rounded-full ${
+                          live.connected ? "bg-[#22c55e]" : "bg-[#666]"
+                        }`}
+                      />
+                    </span>
+                    <span
+                      className={
+                        live.connected ? "text-[#22c55e]" : "text-[#666]"
+                      }
+                    >
+                      {live.connected ? "live · ws" : "rest"}
+                    </span>
+                  </div>
+                  {pulseOn && (
+                    <span className="text-[#dcdcdc]">↻ tick</span>
+                  )}
+                </div>
+
                 {/* Big YES / NO */}
                 <div className="grid grid-cols-2 gap-2">
                   <PriceBlock
@@ -210,19 +293,100 @@ export default function MarketDetailDrawer({
                     pct={yesPct}
                     bid={m.best_bid}
                     color="#22c55e"
+                    pulse={pulseOn && liveYes != null}
                   />
                   <PriceBlock
                     side="NO"
                     pct={noPct}
                     bid={m.best_ask}
                     color="#F03E17"
+                    pulse={pulseOn && liveNo != null}
                   />
                 </div>
+
+                {/* Last trade */}
+                {live.lastTrade && live.lastTrade.price != null && (
+                  <div className="flex items-center justify-between rounded-md border border-white/[0.06] bg-white/[0.015] px-3 py-2 font-mono text-[10px] uppercase tracking-[0.18em]">
+                    <span className="text-[#555]">last trade</span>
+                    <div className="flex items-center gap-3">
+                      <span
+                        style={{
+                          color:
+                            live.lastTrade.side === "yes"
+                              ? "#22c55e"
+                              : "#F03E17",
+                        }}
+                      >
+                        {live.lastTrade.side === "yes" ? "▲ YES" : "▼ NO"} @{" "}
+                        {(live.lastTrade.price * 100).toFixed(1)}¢
+                      </span>
+                      {typeof live.lastTrade.size === "number" &&
+                        live.lastTrade.size > 0 && (
+                          <span className="text-[#bbb]">
+                            size {live.lastTrade.size}
+                          </span>
+                        )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Price chart */}
                 {chartPoints && (
                   <Section title="24h price">
                     <PriceChart points={chartPoints} color={accent} />
+                  </Section>
+                )}
+
+                {/* Why it's moving — related signals */}
+                {relatedSignals.length > 0 && (
+                  <Section title={`Why it's moving · ${relatedSignals.length}`}>
+                    <div className="divide-y divide-white/[0.04] overflow-hidden rounded-md border border-white/[0.06]">
+                      {relatedSignals.map((s) => {
+                        const sc = severityColor(s.severity);
+                        return (
+                          <button
+                            key={s.id}
+                            type="button"
+                            onClick={
+                              onSignalSelect
+                                ? () => onSignalSelect(s.id)
+                                : undefined
+                            }
+                            disabled={!onSignalSelect}
+                            className="flex w-full items-start gap-3 px-3 py-2.5 text-left transition-colors enabled:hover:bg-white/[0.025] disabled:cursor-default"
+                          >
+                            <div className="flex shrink-0 flex-col items-center gap-0.5">
+                              <span
+                                className="font-mono text-[11px] font-semibold leading-none"
+                                style={{ color: sc }}
+                              >
+                                {(s.severity * 10).toFixed(1)}
+                              </span>
+                              <span
+                                className="font-mono text-[7px] uppercase tracking-[0.18em]"
+                                style={{ color: sc, opacity: 0.65 }}
+                              >
+                                {severityLabel(s.severity)}
+                              </span>
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="line-clamp-2 text-[12.5px] leading-snug text-[#dcdcdc]">
+                                {s.title}
+                              </div>
+                              <div className="mt-0.5 flex items-center gap-2 font-mono text-[9px] uppercase tracking-[0.18em] text-[#555]">
+                                <span>{s.category}</span>
+                                {(s.evidence_count ?? 0) > 0 && (
+                                  <>
+                                    <span className="text-[#2a2a2a]">·</span>
+                                    <span>{s.evidence_count} evidence</span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </Section>
                 )}
 
@@ -306,6 +470,61 @@ export default function MarketDetailDrawer({
                   </Section>
                 )}
 
+                {/* Polymarket comments */}
+                {pmComments.length > 0 && (
+                  <section>
+                    <div className="mb-2 flex items-center gap-2 font-mono text-[9px] uppercase tracking-[0.22em] text-[#555]">
+                      <MessageCircle className="h-3 w-3" />
+                      {`Polymarket comments · ${pmComments.length}`}
+                    </div>
+                    <ul className="divide-y divide-white/[0.04] overflow-hidden rounded-md border border-white/[0.06]">
+                      {pmComments.slice(0, 8).map((c) => {
+                        const u = c.author?.username ?? "anon";
+                        const initials = u
+                          .replace(/[^a-z]/gi, "")
+                          .slice(0, 2)
+                          .toUpperCase();
+                        return (
+                          <li key={c.id} className="flex gap-3 px-3 py-3">
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/[0.06] bg-white/[0.04]">
+                              {c.author?.avatar_url ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={c.author.avatar_url}
+                                  alt=""
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                <span className="font-mono text-[10px] uppercase text-[#bbb]">
+                                  {initials || "·"}
+                                </span>
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 text-[12px]">
+                                <span className="font-medium text-[#EAE8E3]">
+                                  {u}
+                                </span>
+                                <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#555]">
+                                  {formatRelativeTime(c.created_at)}
+                                </span>
+                                {(c.reaction_count ?? 0) > 0 && (
+                                  <span className="font-mono text-[9px] tracking-[0.14em] text-[#888]">
+                                    ♡ {c.reaction_count}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="mt-1 line-clamp-4 whitespace-pre-line break-words text-[12.5px] leading-snug text-[#cfcfcf]">
+                                {c.body}
+                              </div>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </section>
+                )}
+
                 {/* Siblings */}
                 {m.siblings && m.siblings.length > 0 && (
                   <Section title={`Related markets · ${m.siblings.length}`}>
@@ -373,22 +592,26 @@ function PriceBlock({
   pct,
   bid,
   color,
+  pulse,
 }: {
   side: string;
   pct: number | null;
   bid?: number | null;
   color: string;
+  pulse?: boolean;
 }) {
   return (
     <div
-      className="rounded-md border bg-white/[0.015] px-4 py-3"
-      style={{ borderColor: `${color}30` }}
+      className="relative overflow-hidden rounded-md border bg-white/[0.015] px-4 py-3 transition-colors"
+      style={{
+        borderColor: pulse ? color : `${color}30`,
+        backgroundColor: pulse ? `${color}10` : undefined,
+        transitionDuration: "300ms",
+      }}
     >
       <div className="flex items-center justify-between font-mono text-[9px] uppercase tracking-[0.22em] text-[#555]">
         <span style={{ color }}>{side}</span>
-        {bid != null && (
-          <span>bid {(bid * 100).toFixed(1)}¢</span>
-        )}
+        {bid != null && <span>bid {(bid * 100).toFixed(1)}¢</span>}
       </div>
       <div className="mt-1 font-editorial text-[28px] leading-none text-[#EAE8E3]">
         {pct ?? "—"}

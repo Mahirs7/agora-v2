@@ -100,3 +100,12 @@ export function getCountryInfo(iso2: string): CountryInfo | null {
   if (!iso2) return null;
   return COUNTRY_BY_ISO2[iso2.toUpperCase()] ?? null;
 }
+
+const ISO2_BY_NUMERIC: Record<string, string> = Object.fromEntries(
+  Object.entries(COUNTRY_BY_ISO2).map(([iso2, info]) => [info.numeric, iso2]),
+);
+
+export function iso2FromNumeric(numeric: string): string | null {
+  if (!numeric) return null;
+  return ISO2_BY_NUMERIC[numeric] ?? null;
+}

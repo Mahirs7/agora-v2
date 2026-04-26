@@ -1,12 +1,13 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { ExternalLink, Link2, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { ExternalLink, Link2, MessageSquare, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   categoryAccent,
   fetchSignalDetail,
+  type FeedItem,
   formatRelativeTime,
   formatVolume,
   platformLabel,
@@ -20,10 +21,14 @@ export default function SignalDetailDrawer({
   signalId,
   onClose,
   fallback,
+  onMarketSelect,
+  feed = [],
 }: {
   signalId: string | null;
   onClose: () => void;
   fallback?: Signal | null;
+  onMarketSelect?: (id: string) => void;
+  feed?: FeedItem[];
 }) {
   const [detail, setDetail] = useState<Signal | null>(fallback ?? null);
   const [loading, setLoading] = useState(false);
@@ -60,6 +65,12 @@ export default function SignalDetailDrawer({
   const open = Boolean(signalId);
   const sig = detail;
   const accent = sig ? severityColor(sig.severity) : "#888";
+
+  /* Discussion = feed items that reference this signal (real, populated data). */
+  const discussion = useMemo(() => {
+    if (!signalId) return [];
+    return feed.filter((p) => p.signal?.id === signalId).slice(0, 8);
+  }, [signalId, feed]);
 
   return (
     <AnimatePresence>
@@ -210,9 +221,16 @@ export default function SignalDetailDrawer({
                         const yesPct = Math.round((m.yes_price ?? 0) * 100);
                         const accent2 = categoryAccent(m.category);
                         return (
-                          <div
+                          <button
                             key={m.market_id}
-                            className="flex items-center justify-between gap-3 px-3 py-2.5"
+                            type="button"
+                            onClick={
+                              onMarketSelect
+                                ? () => onMarketSelect(m.market_id)
+                                : undefined
+                            }
+                            disabled={!onMarketSelect}
+                            className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors enabled:hover:bg-white/[0.025] disabled:cursor-default"
                           >
                             <div className="min-w-0 flex-1">
                               <div className="line-clamp-2 text-[12.5px] leading-snug text-[#dcdcdc]">
@@ -248,7 +266,7 @@ export default function SignalDetailDrawer({
                                 %
                               </span>
                             </span>
-                          </div>
+                          </button>
                         );
                       })}
                     </div>
@@ -264,6 +282,77 @@ export default function SignalDetailDrawer({
                       <EvidenceList items={sig.top_twitter_evidence} />
                     </Section>
                   )}
+
+                {/* Discussion — feed posts referencing this signal */}
+                {discussion.length > 0 && (
+                  <section>
+                    <div className="mb-2 flex items-center gap-2 font-mono text-[9px] uppercase tracking-[0.22em] text-[#555]">
+                      <MessageSquare className="h-3 w-3" />
+                      {`Discussion · ${discussion.length}`}
+                    </div>
+                    <ul className="divide-y divide-white/[0.04] overflow-hidden rounded-md border border-white/[0.06]">
+                      {discussion.map((p) => {
+                        const u = p.user?.username ?? "anonymous";
+                        const initials = u
+                          .replace(/[^a-z]/gi, "")
+                          .slice(0, 2)
+                          .toUpperCase();
+                        return (
+                          <li key={p.id} className="flex gap-3 px-3 py-3">
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/[0.06] bg-white/[0.04]">
+                              {p.user?.avatar_url ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={p.user.avatar_url}
+                                  alt=""
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                <span className="font-mono text-[10px] uppercase text-[#bbb]">
+                                  {initials || "·"}
+                                </span>
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 text-[12px]">
+                                <span className="font-medium text-[#EAE8E3]">
+                                  {u}
+                                </span>
+                                <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#555]">
+                                  {formatRelativeTime(p.created_at)}
+                                </span>
+                              </div>
+                              {p.body && (
+                                <div className="mt-1 line-clamp-3 text-[12.5px] leading-snug text-[#cfcfcf]">
+                                  {p.body}
+                                </div>
+                              )}
+                              {p.trade && p.trade.price != null && (
+                                <div className="mt-1.5 flex items-center gap-2 font-mono text-[9px] uppercase tracking-[0.18em]">
+                                  <span className="text-[#555]">trade</span>
+                                  <span
+                                    style={{
+                                      color:
+                                        p.trade.side === "yes"
+                                          ? "#22c55e"
+                                          : "#F03E17",
+                                    }}
+                                  >
+                                    {p.trade.side === "yes"
+                                      ? "▲ YES"
+                                      : "▼ NO"}{" "}
+                                    @{" "}
+                                    {(p.trade.price * 100).toFixed(0)}¢
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </section>
+                )}
 
                 {/* News / RSS evidence */}
                 {sig.evidence && sig.evidence.length > 0 && (

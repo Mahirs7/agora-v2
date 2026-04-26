@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { COUNTRY_BY_ISO2, getCountryInfo } from "@/lib/country-codes";
+import {
+  COUNTRY_BY_ISO2,
+  getCountryInfo,
+  iso2FromNumeric,
+} from "@/lib/country-codes";
 import { severityColor, severityLabel, type Signal } from "@/lib/kosmos-data";
 
 /* ═════════════════════════════════════════════════════════════════════════
@@ -199,10 +203,12 @@ export default function Globe3D({
   compact = false,
   signals = [],
   onSignalSelect,
+  onCountrySelect,
 }: {
   compact?: boolean;
   signals?: Signal[];
   onSignalSelect?: (id: string) => void;
+  onCountrySelect?: (iso2: string) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const globeElRef = useRef<HTMLDivElement>(null);
@@ -222,10 +228,15 @@ export default function Globe3D({
   const aggMapRef = useRef<Map<string, CountryAggregate>>(new Map());
   const mousePos = useRef({ x: 0, y: 0 });
   const onSignalSelectRef = useRef(onSignalSelect);
+  const onCountrySelectRef = useRef(onCountrySelect);
 
   useEffect(() => {
     onSignalSelectRef.current = onSignalSelect;
   }, [onSignalSelect]);
+
+  useEffect(() => {
+    onCountrySelectRef.current = onCountrySelect;
+  }, [onCountrySelect]);
 
   /* Aggregate signals → per-country */
   const aggregates = useMemo(() => aggregateByCountry(signals), [signals]);
@@ -416,6 +427,14 @@ export default function Globe3D({
           const f = feat as CountryFeature;
           const id = String(f.id ?? "");
           return polygonFillRef.current.has(id) ? 0.008 : 0.002;
+        })
+        .onPolygonClick((feat: object) => {
+          const f = feat as CountryFeature;
+          const numeric = String(f.id ?? "");
+          // Only allow clicks on countries with active signals — others are dead.
+          if (!polygonFillRef.current.has(numeric)) return;
+          const iso2 = iso2FromNumeric(numeric);
+          if (iso2) onCountrySelectRef.current?.(iso2);
         })
         // Signal markers
         .pointsData(markers)
@@ -677,7 +696,7 @@ export default function Globe3D({
       {ready && (
         <>
           <div className="absolute bottom-0 left-1/2 hidden -translate-x-1/2 pb-1 font-mono text-[9px] text-[#444] lg:block">
-            drag to rotate · scroll to zoom · click country to open top signal
+            drag to rotate · scroll to zoom · click country for region · click marker for top signal
           </div>
           <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 font-mono text-[9px] text-[#444] lg:hidden">
             tap a signal to explore
