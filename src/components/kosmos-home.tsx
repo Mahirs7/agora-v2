@@ -325,7 +325,11 @@ function GlobeView({
         />
 
         <div className="relative h-full max-h-[min(calc(100vh-220px),760px)] w-full max-w-[760px] px-6 py-4">
-          <Globe3D compact />
+          <Globe3D
+            compact
+            signals={data.signals}
+            onSignalSelect={onSignalSelect}
+          />
         </div>
       </div>
 
@@ -845,7 +849,7 @@ function CompactWire({
                       </span>
                     </div>
                   </div>
-                </div>
+                </button>
               </li>
             );
           })}
@@ -986,12 +990,14 @@ function CommandPalette({
   data,
   onView,
   onSignalSelect,
+  onMarketSelect,
 }: {
   open: boolean;
   onClose: () => void;
   data: KosmosData;
   onView: (v: ViewKey) => void;
   onSignalSelect: (id: string) => void;
+  onMarketSelect: (id: string) => void;
 }) {
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -1107,7 +1113,7 @@ function CommandPalette({
                     <PaletteRow
                       key={m.id}
                       onSelect={() => {
-                        onView("markets");
+                        onMarketSelect(m.id);
                         onClose();
                       }}
                       icon={<TrendingUp className="h-3.5 w-3.5" />}
