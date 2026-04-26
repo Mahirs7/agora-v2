@@ -1,0 +1,1 @@
+node: --max-all-stack-chunks= is not allowed in NODE_OPTIONS

@@ -273,9 +273,16 @@ function RaceRow({
   onMarketSelect: (id: string) => void;
 }) {
   const candidates = race.top_candidates ?? [];
+  const raceImage = race.image_url ?? candidates.find((c) => c.image_url)?.image_url;
   return (
     <li className="px-5 py-3">
       <div className="flex items-start justify-between gap-4">
+        {raceImage && (
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-white/[0.06] bg-white/[0.03]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={raceImage} alt="" className="h-full w-full object-cover" />
+          </div>
+        )}
         <div className="min-w-0 flex-1">
           <div className="text-[13px] leading-snug text-[#dcdcdc]">
             {race.title}
@@ -339,6 +346,12 @@ function CandidatePill({
       onClick={() => onMarketSelect(candidate.market_id)}
       className="flex items-center gap-2 rounded-md border border-white/[0.06] bg-white/[0.015] px-2.5 py-1 transition-colors hover:border-white/[0.16] hover:bg-white/[0.04]"
     >
+      {candidate.image_url && (
+        <span className="flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/[0.08] bg-white/[0.04]">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={candidate.image_url} alt="" className="h-full w-full object-cover" />
+        </span>
+      )}
       <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#bbb]">
         {label}
       </span>

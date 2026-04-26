@@ -149,6 +149,7 @@ export type MarketSibling = {
 
 export type MarketDetail = Market & {
   description?: string | null;
+  last_synced_at?: string | null;
   high_24h?: number | null;
   low_24h?: number | null;
   best_bid?: number | null;
@@ -620,6 +621,7 @@ export type PoliticsCandidate = {
   market_id: string;
   platform?: string;
   yes_price?: number | null;
+  image_url?: string | null;
 };
 
 export type PoliticsRace = {
@@ -635,6 +637,7 @@ export type PoliticsRace = {
   topic?: string;
   topic_label?: string;
   jurisdiction?: string;
+  image_url?: string | null;
   top_candidates?: PoliticsCandidate[];
 };
 

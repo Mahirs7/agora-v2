@@ -38,6 +38,9 @@ export default function MarketDetailDrawer({
   );
   const [loading, setLoading] = useState(false);
   const [pmComments, setPmComments] = useState<PmComment[]>([]);
+  const [tradeSide, setTradeSide] = useState<"yes" | "no" | null>(null);
+  const [ticketStake, setTicketStake] = useState("100");
+  const [ticketPrice, setTicketPrice] = useState("--");
 
   useEffect(() => {
     if (!marketId) return;
@@ -151,6 +154,27 @@ export default function MarketDetailDrawer({
     const step = Math.max(1, Math.floor(pts.length / target));
     return pts.filter((_, i) => i % step === 0);
   }, [m?.priceHistory]);
+
+  useEffect(() => {
+    if (tradeSide === "yes") {
+      setTicketPrice(
+        yesPrice != null ? `${(yesPrice * 100).toFixed(1)}¢` : "--",
+      );
+    }
+    if (tradeSide === "no") {
+      setTicketPrice(noPrice != null ? `${(noPrice * 100).toFixed(1)}¢` : "--");
+    }
+  }, [tradeSide, yesPrice, noPrice]);
+
+  const ticketOpen = Boolean(tradeSide);
+  const stakeValue = Number(ticketStake);
+  const validStake = Number.isFinite(stakeValue) && stakeValue > 0 ? stakeValue : 0;
+  const selectedPrice =
+    tradeSide === "yes" ? (yesPrice ?? null) : tradeSide === "no" ? (noPrice ?? null) : null;
+  const estPayout =
+    selectedPrice != null && selectedPrice > 0
+      ? validStake / selectedPrice
+      : null;
 
   return (
     <AnimatePresence>
@@ -294,6 +318,7 @@ export default function MarketDetailDrawer({
                     bid={m.best_bid}
                     color="#22c55e"
                     pulse={pulseOn && liveYes != null}
+                    onClick={() => setTradeSide("yes")}
                   />
                   <PriceBlock
                     side="NO"
@@ -301,6 +326,7 @@ export default function MarketDetailDrawer({
                     bid={m.best_ask}
                     color="#F03E17"
                     pulse={pulseOn && liveNo != null}
+                    onClick={() => setTradeSide("no")}
                   />
                 </div>
 
@@ -581,6 +607,100 @@ export default function MarketDetailDrawer({
               </div>
             )}
           </div>
+
+          <AnimatePresence>
+            {ticketOpen && m && tradeSide && (
+              <motion.div
+                initial={{ opacity: 0, y: 14 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 16 }}
+                transition={{ duration: 0.16 }}
+                className="absolute inset-x-4 bottom-4 z-20 rounded-xl border border-white/[0.1] bg-[#0f1016] p-4 shadow-[0_24px_64px_rgba(0,0,0,0.7)]"
+              >
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-[#666]">
+                      Trade ticket
+                    </p>
+                    <p className="mt-0.5 line-clamp-1 text-[13px] text-[#EAE8E3]">
+                      {m.title}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setTradeSide(null)}
+                    className="rounded border border-white/[0.1] px-2 py-1 font-mono text-[9px] uppercase tracking-[0.18em] text-[#888] transition-colors hover:bg-white/[0.05] hover:text-[#EAE8E3]"
+                  >
+                    Close
+                  </button>
+                </div>
+
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="rounded-md border border-white/[0.08] bg-[#0a0a0d] px-3 py-2">
+                    <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-[#666]">
+                      Side
+                    </div>
+                    <div
+                      className="mt-1 font-mono text-[12px] uppercase tracking-[0.2em]"
+                      style={{ color: tradeSide === "yes" ? "#22c55e" : "#F03E17" }}
+                    >
+                      {tradeSide}
+                    </div>
+                  </div>
+
+                  <div className="rounded-md border border-white/[0.08] bg-[#0a0a0d] px-3 py-2">
+                    <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-[#666]">
+                      Price
+                    </div>
+                    <div className="mt-1 font-editorial text-[20px] leading-none text-[#EAE8E3]">
+                      {ticketPrice}
+                    </div>
+                  </div>
+
+                  <div className="rounded-md border border-white/[0.08] bg-[#0a0a0d] px-3 py-2 sm:col-span-2">
+                    <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-[#666]">
+                      Stake (USD)
+                    </div>
+                    <input
+                      type="number"
+                      min="1"
+                      value={ticketStake}
+                      onChange={(e) => setTicketStake(e.target.value)}
+                      className="mt-1 h-8 w-full rounded border border-white/[0.08] bg-white/[0.02] px-2 font-mono text-[12px] text-[#EAE8E3] focus:border-white/[0.16] focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                  <Stat label="Order" value="Market" />
+                  <Stat
+                    label="Est. payout"
+                    value={
+                      estPayout == null
+                        ? "--"
+                        : `$${estPayout.toLocaleString(undefined, {
+                            maximumFractionDigits: estPayout >= 1000 ? 0 : 2,
+                          })}`
+                    }
+                  />
+                  <Stat
+                    label="Max loss"
+                    value={`$${validStake.toLocaleString(undefined, {
+                      maximumFractionDigits: validStake >= 1000 ? 0 : 2,
+                    })}`}
+                    color="#F4B299"
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  className="mt-3 w-full rounded-md border border-white/[0.12] bg-white/[0.04] py-2 font-mono text-[10px] uppercase tracking-[0.22em] text-[#bbb]"
+                >
+                  Trade
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </motion.aside>
       )}
     </AnimatePresence>
@@ -593,16 +713,20 @@ function PriceBlock({
   bid,
   color,
   pulse,
+  onClick,
 }: {
   side: string;
   pct: number | null;
   bid?: number | null;
   color: string;
   pulse?: boolean;
+  onClick?: () => void;
 }) {
   return (
-    <div
-      className="relative overflow-hidden rounded-md border bg-white/[0.015] px-4 py-3 transition-colors"
+    <button
+      type="button"
+      onClick={onClick}
+      className="relative w-full overflow-hidden rounded-md border bg-white/[0.015] px-4 py-3 text-left transition-colors hover:bg-white/[0.03]"
       style={{
         borderColor: pulse ? color : `${color}30`,
         backgroundColor: pulse ? `${color}10` : undefined,
@@ -617,7 +741,7 @@ function PriceBlock({
         {pct ?? "—"}
         <span className="ml-1 text-[12px] text-[#555]">%</span>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -670,23 +794,27 @@ function PriceChart({ points, color }: { points: number[]; color: string }) {
   const max = Math.max(...points);
   const range = Math.max(0.001, max - min);
   const step = width / Math.max(1, points.length - 1);
-  const coords = points
-    .map((v, i) => {
-      const x = i * step;
-      const y = height - ((v - min) / range) * (height - 8) - 4;
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    })
+  const plotted = points.map((v, i) => {
+    const x = i * step;
+    const y = height - ((v - min) / range) * (height - 8) - 4;
+    return { x, y };
+  });
+  const coords = plotted
+    .map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`)
     .join(" ");
+  const areaPath = `M ${plotted[0]?.x.toFixed(1) ?? "0"},${height - 2} L ${coords} L ${plotted[plotted.length - 1]?.x.toFixed(1) ?? width},${height - 2} Z`;
   const last = points[points.length - 1];
   const first = points[0];
   const delta = last - first;
   const positive = delta >= 0;
+  const trendColor = positive ? "#22c55e" : "#F03E17";
+  const lastPoint = plotted[plotted.length - 1];
 
   return (
-    <div className="rounded-md border border-white/[0.06] bg-white/[0.015] p-3">
+    <div className="rounded-md border border-white/[0.06] bg-[linear-gradient(180deg,rgba(255,255,255,0.035)_0%,rgba(255,255,255,0.012)_45%,rgba(255,255,255,0.005)_100%)] p-3">
       <div className="mb-1 flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.18em] text-[#555]">
         <span>YES price</span>
-        <span style={{ color: positive ? "#22c55e" : "#F03E17" }}>
+        <span style={{ color: trendColor }}>
           {positive ? "▲" : "▼"} {Math.abs(delta * 100).toFixed(1)}%
         </span>
       </div>
@@ -695,14 +823,61 @@ function PriceChart({ points, color }: { points: number[]; color: string }) {
         preserveAspectRatio="none"
         className="h-24 w-full"
       >
+        <defs>
+          <linearGradient id="chartLineGradient" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor={color} stopOpacity="0.55" />
+            <stop offset="55%" stopColor={color} stopOpacity="1" />
+            <stop offset="100%" stopColor={trendColor} stopOpacity="1" />
+          </linearGradient>
+          <linearGradient id="chartAreaGradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={trendColor} stopOpacity="0.22" />
+            <stop offset="100%" stopColor={trendColor} stopOpacity="0" />
+          </linearGradient>
+          <filter id="chartGlow" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="1.5" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+
+        {[0.2, 0.4, 0.6, 0.8].map((ratio) => {
+          const y = (height - 2) * ratio;
+          return (
+            <line
+              key={ratio}
+              x1="0"
+              y1={y}
+              x2={width}
+              y2={y}
+              stroke="rgba(255,255,255,0.08)"
+              strokeDasharray="2 6"
+              strokeWidth="0.8"
+            />
+          );
+        })}
+
+        <path d={areaPath} fill="url(#chartAreaGradient)" />
         <polyline
           fill="none"
           points={coords}
-          stroke={color}
-          strokeWidth="1.5"
+          stroke="url(#chartLineGradient)"
+          strokeWidth="1.9"
           strokeLinecap="round"
           strokeLinejoin="round"
+          filter="url(#chartGlow)"
         />
+        {lastPoint && (
+          <circle
+            cx={lastPoint.x}
+            cy={lastPoint.y}
+            r="2.8"
+            fill={trendColor}
+            stroke="rgba(10,10,13,0.9)"
+            strokeWidth="1"
+          />
+        )}
       </svg>
       <div className="mt-1 flex items-center justify-between font-mono text-[9px] uppercase tracking-[0.18em] text-[#555]">
         <span>min {(min * 100).toFixed(1)}%</span>
