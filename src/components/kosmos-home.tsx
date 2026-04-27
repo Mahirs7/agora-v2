@@ -167,7 +167,7 @@ function TopBar({
   return (
     <header className="flex h-12 shrink-0 items-center justify-between border-b border-white/[0.05] bg-[#070709] px-5">
       <div className="flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[0.2em]">
-        <span className="text-[#F03E17]">Kosmos</span>
+        <span className="text-[#F03E17]">Agora</span>
         <ChevronRight className="h-3 w-3 text-[#333]" />
         <span className="text-[#bbb]">{VIEW_LABELS[view]}</span>
       </div>
@@ -289,9 +289,6 @@ function StatusBar({ data }: { data: KosmosData }) {
       </div>
 
       <div className="flex items-center gap-4">
-        <span className="hidden md:inline">
-          api <span className="text-[#bbb]">api.kosmos.fyi</span>
-        </span>
         <span className="hidden md:inline">
           updated <UpdatedAgo at={data.lastUpdated} />
         </span>
